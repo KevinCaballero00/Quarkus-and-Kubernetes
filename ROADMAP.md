@@ -133,12 +133,25 @@ Un clúster real donde equivocarte sin consecuencias.
 
 Cerrar el circuito completo con un CRD de juguete, antes de que la lógica de negocio complique el diagnóstico.
 
-- [ ] Generar el proyecto con la extensión `quarkus-operator-sdk` y fijar versiones exactas.
-- [ ] Un CRD trivial y un reconciler que solo escriba una marca de tiempo en el status.
-- [ ] Modo dev con recarga en caliente apuntando al clúster kind.
-- [ ] Entender dónde deja el build los CRDs generados y el RBAC.
+- [x] Proyecto generado con `quarkus-maven-plugin` sobre la plataforma 3.39.3.
+- [x] CRD `BackupPolicy` con `schedule` obligatorio y subrecurso de status.
+- [x] Reconciler que sella `observedAt` y `observedGeneration`.
+- [x] Verificado en el clúster: el status se escribe y `observedGeneration` sigue al spec.
+- [ ] Modo dev con recarga en caliente. La verificación se hizo con el jar empaquetado.
 
 **Cierras cuando:** aplicas un CR y `kubectl get` muestra el status que escribió tu código.
+
+> **La versión del Operator SDK la gobierna la plataforma.** Viaja como BOM miembro
+> (`quarkus-operator-sdk-bom`) en la misma 3.39.3 que el core, así que no se fija a mano
+> y la compatibilidad queda garantizada.
+>
+> **`io.fabric8:generator-annotations` hay que declararlo.** Llega al classpath de build
+> pero no al de compilación, así que sin declararlo no compilan `@Required`, `@Pattern`
+> ni las columnas de impresión que hacen falta en M2. La versión sí la gestiona el BOM.
+>
+> **Dos avisos de RBAC en el build son esperados.** El generador no sabe en qué namespace
+> vivirá la cuenta de servicio del operator. Se resuelven en M8 al fijar el namespace y
+> acotar el alcance de observación.
 
 ### M2 · Diseño de la API — 2 días
 

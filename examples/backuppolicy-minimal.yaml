@@ -1,0 +1,10 @@
+# Politica minima del modulo 1. Solo lleva schedule porque el reconciler
+# todavia no hace nada con ella: sirve para comprobar que el operator observa
+# el recurso y consigue escribir en su status.
+apiVersion: pgvault.io/v1alpha1
+kind: BackupPolicy
+metadata:
+  name: orders-nightly
+  namespace: default
+spec:
+  schedule: "0 3 * * *"

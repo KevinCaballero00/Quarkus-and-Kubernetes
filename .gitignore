@@ -1,11 +1,16 @@
 # Maven
 target/
+pom.xml.tag
+pom.xml.releaseBackup
 pom.xml.versionsBackup
-.mvn/wrapper/maven-wrapper.jar
+release.properties
+.flattened-pom.xml
 
 # Quarkus
 .quarkus/
+/.quarkus/cli/plugins/
 *.env
+.certs/
 
 # Compilación nativa
 *.build_artifacts.txt
@@ -16,10 +21,18 @@ pom.xml.versionsBackup
 *.ipr
 *.iws
 .vscode/
+.factorypath
 .project
 .classpath
 .settings/
+bin/
 nb-configuration.xml
+
+# Editores
+*.swp
+*.swo
+*.orig
+*.rej
 
 # Sistema operativo
 .DS_Store
@@ -29,4 +42,5 @@ desktop.ini
 # Credenciales y kubeconfig locales
 kubeconfig
 *.kubeconfig
+.env
 .env.local
