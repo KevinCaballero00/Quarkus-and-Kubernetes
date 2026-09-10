@@ -1,0 +1,32 @@
+# Maven
+target/
+pom.xml.versionsBackup
+.mvn/wrapper/maven-wrapper.jar
+
+# Quarkus
+.quarkus/
+*.env
+
+# Compilación nativa
+*.build_artifacts.txt
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.project
+.classpath
+.settings/
+nb-configuration.xml
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Credenciales y kubeconfig locales
+kubeconfig
+*.kubeconfig
+.env.local
