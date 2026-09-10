@@ -62,6 +62,7 @@ spec:
   source:
     host: postgres.apps.svc.cluster.local
     database: orders
+    sslMode: Prefer                    # Disable|Prefer|Require|VerifyCa|VerifyFull
     credentialsSecretRef: { name: orders-db }
   destination:
     s3:
@@ -70,8 +71,8 @@ spec:
       prefix: orders/
       forcePathStyle: true
       credentialsSecretRef: { name: minio-creds }
-  format: custom                     # plain | custom | directory
-  compression: zstd
+  format: Custom                       # Plain | Custom | Directory
+  compression: Zstd                    # None | Gzip | Zstd
   retention:
     keepLast: 7
     keepWeekly: 4
@@ -86,8 +87,10 @@ status:
 # ------------------------------- una ejecución, creada por el operator
 apiVersion: pgvault.io/v1alpha1
 kind: Backup
+spec:
+  policyRef: { name: orders-nightly }  # o source + destination, nunca ambos
 status:
-  phase: Succeeded                   # Pending | Running | Succeeded | Failed
+  phase: Succeeded                     # Pending | Running | Succeeded | Failed
   objectKey: orders/2026-09-10T030000Z.dump.zst
   sizeBytes: 418533376
   durationSeconds: 74
@@ -98,10 +101,13 @@ status:
 apiVersion: pgvault.io/v1alpha1
 kind: Restore
 spec:
-  backupRef: { name: orders-nightly-20260910-0300 }
+  fromPolicy:                          # o backupRef, nunca ambos
+    policyRef: { name: orders-nightly }
+    mode: Latest                       # Latest | Before (Before exige 'before')
   target:
     host: postgres-staging.apps.svc.cluster.local
     database: orders
+    credentialsSecretRef: { name: staging-db }
     dropExisting: true
 ```
 
@@ -157,12 +163,29 @@ Cerrar el circuito completo con un CRD de juguete, antes de que la lógica de ne
 
 Los tres CRDs completos. Aquí es donde un operator se distingue de un script disfrazado.
 
-- [ ] Validación declarativa con las anotaciones de Fabric8: campos requeridos, patrón de cron, rangos numéricos.
-- [ ] Reglas CEL en el esquema para lo que las anotaciones no cubren, como exigir exactamente uno entre referencia a política y configuración en línea.
-- [ ] Columnas de impresión para que `kubectl get` sea legible sin describir nada.
-- [ ] Subrecurso de status con condiciones al estilo estándar de Kubernetes, incluyendo motivo, mensaje y generación observada.
+- [x] Tres CRDs completos: `BackupPolicy`, `Backup` y `Restore`.
+- [x] Validación declarativa: requeridos, patrón de cron, rangos de puerto, nombre de bucket.
+- [x] Cuatro reglas CEL, todas verificadas contra el servidor de API.
+- [x] Columnas de impresión en los tres recursos.
+- [x] Status con `Condition` estándar de Kubernetes y `observedGeneration`.
 
 **Cierras cuando:** el servidor de API rechaza por sí solo un cron mal escrito, sin que tu código intervenga.
+
+> **Los defaults del esquema y CEL se estorban.** El servidor de API aplica los valores por
+> defecto antes de evaluar CEL, así que un campo con default hace que `has(self.campo)` sea
+> siempre cierto y rompe cualquier regla de exclusividad sobre él. Por eso `format` y
+> `compression` no llevan default en `Backup`: los resuelve el reconciler.
+>
+> **`@Default("")` genera `default: null`.** No es un valor válido para un campo de tipo
+> string. Un campo ausente ya significa lo mismo, así que se deja sin default.
+>
+> **El generador ordena las columnas por su jsonPath**, no por orden de declaración. Deja
+> `AGE` primero y `PHASE` en medio. Es cosmético. Si molesta, se corrige al empaquetar los
+> CRD en el chart de M10.
+>
+> **El Operator SDK filtra por cambio de generación.** Anotar o etiquetar un recurso no
+> dispara reconciliación, solo la disparan los cambios de spec. Conviene saberlo antes de
+> depurar "por qué no reconcilia".
 
 ### M3 · Plano de datos — 1 a 2 días
 

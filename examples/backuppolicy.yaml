@@ -1,0 +1,39 @@
+# Politica completa. Apunta al PostgreSQL y al MinIO que despliega el modulo 3.
+#
+# Casi todo el spec es opcional: formato, compresion, concurrencia, zona horaria
+# y puerto tienen valor por defecto en el esquema, asi que el servidor de API los
+# rellena solo. Se dejan escritos aqui para que el ejemplo sirva de referencia.
+apiVersion: pgvault.io/v1alpha1
+kind: BackupPolicy
+metadata:
+  name: orders-nightly
+  namespace: default
+spec:
+  schedule: "0 3 * * *"
+  timeZone: America/Bogota
+  concurrencyPolicy: Forbid
+
+  source:
+    host: postgres.pgvault-system.svc.cluster.local
+    port: 5432
+    database: orders
+    sslMode: Prefer
+    credentialsSecretRef:
+      name: orders-db
+
+  destination:
+    s3:
+      endpoint: http://minio.pgvault-system.svc.cluster.local:9000
+      bucket: pg-backups
+      prefix: orders/
+      forcePathStyle: true
+      credentialsSecretRef:
+        name: minio-creds
+
+  format: Custom
+  compression: Zstd
+
+  retention:
+    keepLast: 7
+    keepWeekly: 4
+    maxAge: 30d

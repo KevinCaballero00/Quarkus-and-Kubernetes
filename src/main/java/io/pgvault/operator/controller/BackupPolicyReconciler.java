@@ -8,16 +8,14 @@ import io.pgvault.operator.api.v1alpha1.BackupPolicyStatus;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.jboss.logging.Logger;
 
-import java.time.Instant;
+import java.util.ArrayList;
 
 /**
- * Reconciler minimo del modulo 1: sella una marca de tiempo en el status.
+ * Reconciler de politicas.
  *
- * <p>No hace nada util todavia, y ese es el objetivo. Si esto funciona, quedan
- * verificados el CRD generado, el registro del controlador, los permisos RBAC
- * de lectura y de escritura sobre el subrecurso de status, y la conexion con el
- * cluster. Cuando el modulo 5 traiga el planificador, cualquier fallo sera de la
- * logica nueva y no de la fontaneria.
+ * <p>En el modulo 2 solo acusa recibo: marca la generacion observada y publica
+ * una condition Ready. El planificador de verdad, con calculo del proximo
+ * disparo y creacion de Backups, llega en el modulo 5.
  */
 @ApplicationScoped
 public class BackupPolicyReconciler implements Reconciler<BackupPolicy> {
@@ -26,16 +24,31 @@ public class BackupPolicyReconciler implements Reconciler<BackupPolicy> {
 
     @Override
     public UpdateControl<BackupPolicy> reconcile(BackupPolicy policy, Context<BackupPolicy> context) {
-        String schedule = policy.getSpec() == null ? "<sin spec>" : policy.getSpec().getSchedule();
 
-        LOG.infof("Reconciliando %s/%s con schedule %s",
+        Long generation = policy.getMetadata().getGeneration();
+
+        LOG.debugf("Reconciliando %s/%s, generacion %d",
                 policy.getMetadata().getNamespace(),
                 policy.getMetadata().getName(),
-                schedule);
+                generation);
 
-        BackupPolicyStatus status = new BackupPolicyStatus();
-        status.setObservedAt(Instant.now().toString());
-        status.setObservedGeneration(policy.getMetadata().getGeneration());
+        BackupPolicyStatus status = policy.getStatus();
+        if (status == null) {
+            status = new BackupPolicyStatus();
+        }
+        if (status.getConditions() == null) {
+            status.setConditions(new ArrayList<>());
+        }
+
+        status.setObservedGeneration(generation);
+
+        Conditions.set(status.getConditions(),
+                Conditions.READY,
+                true,
+                "Accepted",
+                "La politica es sintacticamente valida. El planificador llega en el modulo 5.",
+                generation);
+
         policy.setStatus(status);
 
         return UpdateControl.patchStatus(policy);

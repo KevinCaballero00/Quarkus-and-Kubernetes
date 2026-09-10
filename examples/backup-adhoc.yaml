@@ -1,0 +1,12 @@
+# Copia fuera de horario, heredando todo de la politica.
+#
+# Es la forma habitual de pedir un backup a mano: justo antes de una migracion,
+# sin tocar el schedule ni duplicar la configuracion de origen y destino.
+apiVersion: pgvault.io/v1alpha1
+kind: Backup
+metadata:
+  name: orders-pre-migracion
+  namespace: default
+spec:
+  policyRef:
+    name: orders-nightly

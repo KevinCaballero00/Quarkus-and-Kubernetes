@@ -1,30 +1,38 @@
 package io.pgvault.operator.api.v1alpha1;
 
 import com.fasterxml.jackson.annotation.JsonPropertyDescription;
+import io.fabric8.kubernetes.api.model.Condition;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
- * Lo que el operator reporta. En el modulo 2 crece con conditions al estilo
- * estandar de Kubernetes, ultimo y proximo disparo, y el ultimo backup correcto.
+ * Lo que el operator reporta sobre una politica.
  *
- * <p>observedGeneration es el campo que permite distinguir "todavia no he visto
- * tu cambio" de "lo vi y este es el resultado". Sin el, un usuario no puede
- * saber si el status que esta leyendo corresponde al spec que acaba de aplicar.
+ * <p>Las conditions son el tipo estandar de la maquinaria de Kubernetes, no uno
+ * propio. Eso importa mas de lo que parece: cualquier herramienta que ya sepa
+ * leer conditions, de kubectl wait a Argo CD, entiende este status sin
+ * adaptadores.
  */
 public class BackupPolicyStatus {
 
-    @JsonPropertyDescription("Instante en el que el operator observo esta politica por ultima vez.")
-    private String observedAt;
-
-    @JsonPropertyDescription("Generacion del spec a la que corresponde esta observacion.")
+    @JsonPropertyDescription("Generacion del spec a la que corresponde este status.")
     private Long observedGeneration;
 
-    public String getObservedAt() {
-        return observedAt;
-    }
+    @JsonPropertyDescription("Condiciones estandar: Ready, Scheduled, StorageReachable.")
+    private List<Condition> conditions = new ArrayList<>();
 
-    public void setObservedAt(String observedAt) {
-        this.observedAt = observedAt;
-    }
+    @JsonPropertyDescription("Ultima vez que el operator disparo un backup por esta politica.")
+    private String lastScheduleTime;
+
+    @JsonPropertyDescription("Proximo disparo calculado a partir del schedule y la zona horaria.")
+    private String nextScheduleTime;
+
+    @JsonPropertyDescription("Resumen de la ultima copia correcta.")
+    private BackupSummary lastSuccessfulBackup;
+
+    @JsonPropertyDescription("Backups de esta politica que todavia no han terminado.")
+    private List<String> activeBackups = new ArrayList<>();
 
     public Long getObservedGeneration() {
         return observedGeneration;
@@ -32,5 +40,45 @@ public class BackupPolicyStatus {
 
     public void setObservedGeneration(Long observedGeneration) {
         this.observedGeneration = observedGeneration;
+    }
+
+    public List<Condition> getConditions() {
+        return conditions;
+    }
+
+    public void setConditions(List<Condition> conditions) {
+        this.conditions = conditions;
+    }
+
+    public String getLastScheduleTime() {
+        return lastScheduleTime;
+    }
+
+    public void setLastScheduleTime(String lastScheduleTime) {
+        this.lastScheduleTime = lastScheduleTime;
+    }
+
+    public String getNextScheduleTime() {
+        return nextScheduleTime;
+    }
+
+    public void setNextScheduleTime(String nextScheduleTime) {
+        this.nextScheduleTime = nextScheduleTime;
+    }
+
+    public BackupSummary getLastSuccessfulBackup() {
+        return lastSuccessfulBackup;
+    }
+
+    public void setLastSuccessfulBackup(BackupSummary lastSuccessfulBackup) {
+        this.lastSuccessfulBackup = lastSuccessfulBackup;
+    }
+
+    public List<String> getActiveBackups() {
+        return activeBackups;
+    }
+
+    public void setActiveBackups(List<String> activeBackups) {
+        this.activeBackups = activeBackups;
     }
 }

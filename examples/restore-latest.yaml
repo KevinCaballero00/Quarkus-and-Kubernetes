@@ -1,0 +1,22 @@
+# Recuperacion de la ultima copia correcta hacia una base distinta.
+#
+# Restaurar a staging en vez de sobre produccion es la forma sensata de probar
+# que las copias sirven, y es lo que hace el test de extremo a extremo del
+# modulo 9.
+apiVersion: pgvault.io/v1alpha1
+kind: Restore
+metadata:
+  name: orders-a-staging
+  namespace: default
+spec:
+  fromPolicy:
+    policyRef:
+      name: orders-nightly
+    mode: Latest
+
+  target:
+    host: postgres-staging.pgvault-system.svc.cluster.local
+    database: orders
+    credentialsSecretRef:
+      name: staging-db
+    dropExisting: true
