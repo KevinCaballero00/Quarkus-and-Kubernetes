@@ -116,12 +116,18 @@ cumplir el criterio de cierre: es lo que evita acumular deuda invisible.
 
 Un clúster real donde equivocarte sin consecuencias.
 
-- [ ] Arrancar Docker Desktop y confirmar que el daemon responde.
-- [ ] Instalar `kind`, `helm`, el CLI de Quarkus y `gh` con winget o scoop.
-- [ ] Crear un clúster `pgvault-dev` de un control-plane y dos workers.
-- [ ] Crear el repo en GitHub desde el día cero y comprometerte a commits pequeños. El historial también se mira.
+- [x] Arrancar Docker Desktop y confirmar que el daemon responde. Servidor 29.7.2.
+- [x] Instalar `kind` 0.33.0, `helm` 4.3.0 y `gh` 2.100.0 con winget.
+- [x] Crear un clúster `pgvault-dev` de un control-plane y dos workers, Kubernetes 1.37.0.
+- [x] Repo git local en `main` con los primeros commits.
+- [ ] Publicarlo en GitHub. Requiere `gh auth login`, que es interactivo.
 
 **Cierras cuando:** los tres nodos aparecen Ready y el repo tiene su primer commit.
+
+> **El CLI de Quarkus no está en winget.** No hace falta: el proyecto se genera con
+> `quarkus-maven-plugin` desde Maven, que además obliga a fijar la versión de la plataforma
+> de forma explícita en el `pom.xml`. Mejor para reproducibilidad que un CLI que se
+> autoactualiza.
 
 ### M1 · Esqueleto Quarkus y primer ciclo — 1 día
 
