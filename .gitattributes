@@ -1,0 +1,20 @@
+# Normaliza los finales de línea. Sin esto, un script con CRLF copiado a una
+# imagen Linux falla con "bad interpreter", que es un error caro de diagnosticar.
+* text=auto eol=lf
+
+*.sh        text eol=lf
+Dockerfile* text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.java      text eol=lf
+*.xml       text eol=lf
+*.md        text eol=lf
+
+*.cmd       text eol=crlf
+*.bat       text eol=crlf
+
+*.jar    binary
+*.png    binary
+*.gif    binary
+*.dump   binary
+mvnw     text eol=lf
