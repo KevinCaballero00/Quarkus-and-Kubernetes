@@ -69,15 +69,29 @@ public final class RunnerJobs {
     }
 
     public static String backupJobName(String backupName) {
-        return truncate(backupName, MAX_JOB_NAME - "-backup".length()) + "-backup";
+        return derive(backupName, "-backup");
     }
 
     public static String cleanupJobName(String backupName) {
-        return truncate(backupName, MAX_JOB_NAME - "-cleanup".length()) + "-cleanup";
+        return derive(backupName, "-cleanup");
     }
 
-    private static String truncate(String value, int max) {
-        return value.length() <= max ? value : value.substring(0, max);
+    /**
+     * Nombre de Job derivado del nombre del Backup, recortado si hace falta.
+     *
+     * <p>Un recorte a secas colisionaria justo donde mas duele: los Backup que
+     * genera una politica comparten prefijo y solo se distinguen por la marca de
+     * tiempo del final, que es lo primero que se pierde al cortar. De ahi el
+     * sufijo con el hash del nombre completo, que es estable entre ejecuciones
+     * porque el de String lo fija la especificacion del lenguaje.
+     */
+    private static String derive(String backupName, String suffix) {
+        int budget = MAX_JOB_NAME - suffix.length();
+        if (backupName.length() <= budget) {
+            return backupName + suffix;
+        }
+        String hash = Integer.toHexString(backupName.hashCode() & 0xffffff);
+        return backupName.substring(0, budget - hash.length() - 1) + "-" + hash + suffix;
     }
 
     public static Map<String, String> labels(String backupName, String component) {

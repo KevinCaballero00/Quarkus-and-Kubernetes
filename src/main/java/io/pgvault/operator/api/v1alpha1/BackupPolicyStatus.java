@@ -22,7 +22,7 @@ public class BackupPolicyStatus {
     @JsonPropertyDescription("Condiciones estandar: Ready, Scheduled, StorageReachable.")
     private List<Condition> conditions = new ArrayList<>();
 
-    @JsonPropertyDescription("Ultima vez que el operator disparo un backup por esta politica.")
+    @JsonPropertyDescription("Ultimo disparo del schedule que el operator ya proceso, lo ejecutara o lo saltara.")
     private String lastScheduleTime;
 
     @JsonPropertyDescription("Proximo disparo calculado a partir del schedule y la zona horaria.")

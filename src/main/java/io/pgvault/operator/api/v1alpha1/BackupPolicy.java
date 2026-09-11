@@ -38,10 +38,14 @@ import io.fabric8.kubernetes.model.annotation.Version;
         name = "Last-Backup",
         jsonPath = ".status.lastSuccessfulBackup.completionTime",
         type = AdditionalPrinterColumn.Type.DATE)
+// STRING y no DATE, aunque sea una fecha. kubectl no imprime las columnas de
+// tipo DATE: imprime la antiguedad, y la antiguedad de algo que aun no ha
+// pasado es negativa, asi que sale como "<invalid>". DATE sirve para lo que ya
+// ocurrio, que es el caso de Last-Backup y de Age.
 @AdditionalPrinterColumn(
         name = "Next-Run",
         jsonPath = ".status.nextScheduleTime",
-        type = AdditionalPrinterColumn.Type.DATE)
+        type = AdditionalPrinterColumn.Type.STRING)
 @AdditionalPrinterColumn(
         name = "Ready",
         jsonPath = ".status.conditions[?(@.type=='Ready')].status",

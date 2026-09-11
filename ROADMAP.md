@@ -286,12 +286,69 @@ desapareció del bucket en cinco segundos.
 El cron vive dentro del operator, no en CronJobs de Kubernetes. Es más trabajo y es la decisión que
 más vas a defender.
 
-- [ ] Calcular el próximo disparo respetando la zona horaria y reprogramar la reconciliación exactamente para ese momento.
-- [ ] Registrar último y próximo disparo en el status.
-- [ ] Honrar la suspensión y la política de concurrencia.
-- [ ] Ventana de disparos perdidos: qué hacer si el operator estuvo caído dos horas.
+- [x] Parser de cron propio, con el próximo disparo y el anterior, sin dependencias y sin estado.
+- [x] Reprogramación de la reconciliación para el instante exacto del próximo disparo.
+- [x] Último y próximo disparo, copias en curso y resumen de la última buena, en el status.
+- [x] Suspensión y las tres políticas de concurrencia.
+- [x] Ventana de disparos perdidos: un operator caído dos horas arranca una copia, no sesenta.
 
 **Cierras cuando:** una política cada dos minutos genera Backups puntuales, y suspenderla los detiene sin borrar nada.
+
+Verificado en el clúster. Una política `*/2 * * * *` en `America/Bogota` disparó a las 20:20:01 y a las
+20:22:01 UTC, un segundo después de la hora exacta, que es el margen con el que se reprograma.
+Suspenderla dejó pasar el disparo de las 20:24 sin crear nada y sin tocar los dos objetos del bucket.
+Al reanudarla apareció una sola copia de recuperación, la del último disparo perdido. Con un origen
+inalcanzable y `Forbid`, los disparos de las 20:28 y las 20:29 quedaron saltados con el motivo escrito
+en el status mientras la copia de las 20:27 seguía reintentando. La aritmética del cron se comprobó
+aparte con `jshell` contra `target/classes`: hora local y zona, regla de Vixie, fin de mes, el 31 de
+febrero y la hora que no existe el día del cambio de horario.
+
+> **El parser de cron es propio, y son ciento cincuenta líneas bien gastadas.** La alternativa era
+> arrastrar `cron-utils` para leer cinco campos separados por espacios. El patrón del CRD ya
+> restringe la entrada a `*`, números, rangos, listas y pasos, así que una dependencia serviría
+> sobre todo para entender sintaxis que el servidor de API rechaza antes de llegar aquí. A cambio,
+> el cálculo queda como una función pura sin estado: se le pregunta por el próximo disparo y por el
+> anterior, y responde sin clientes, sin relojes escondidos y sin un clúster delante.
+>
+> **Preguntar por el disparo anterior es lo que resuelve la caída de dos horas.** En vez de
+> enumerar todo lo que se perdió, se pregunta cuál fue el último disparo y se compara con el que la
+> política dice haber procesado. Sale gratis la propiedad que importa: al volver se ejecuta como
+> mucho una copia. Nadie quiere sesenta volcados simultáneos contra la misma base a modo de
+> bienvenida, y cincuenta y nueve de esas copias quedarían obsoletas en cuanto terminara la última.
+> `startingDeadlineSeconds` decide además si ese disparo pendiente todavía merece la pena.
+>
+> **La búsqueda es en hora local y la conversión a instante se hace al final.** Es lo único que
+> respeta de verdad una zona horaria: una política a las tres de la mañana en Bogotá sigue siendo a
+> las tres de la mañana aunque cambie el desfase con UTC. Para la hora que no existe el día del
+> cambio de horario se adelanta al otro lado del salto, y para la que ocurre dos veces se toma la
+> primera. Un disparo movido una hora es mejor que un disparo perdido.
+>
+> **Un disparo saltado por concurrencia se marca como procesado.** Es la diferencia con el
+> controlador de CronJob de Kubernetes, que lo deja pendiente y acaba ejecutándolo tarde, pegado al
+> que todavía estaba corriendo. Para copias de seguridad eso es lo contrario de lo que pide
+> `Forbid`: la ventana se saltó, y se saltó del todo.
+>
+> **Los Backup generados no llevan owner reference a su política.** Un CronJob sí es dueño de sus
+> Jobs, así que borrarlo se los lleva por delante. Aquí eso significaría que un
+> `kubectl delete backuppolicy` borra todas las copias y, por el finalizer de cada una, todos los
+> objetos del bucket. Eso no es una limpieza elegante: es una pérdida de datos con buena prensa. Las
+> copias solo se borran por retención o a mano.
+>
+> **El nombre del Backup es la clave de deduplicación.** Se compone del nombre de la política y del
+> minuto del disparo en UTC, así que si el operator se reinicia justo después de crear el recurso y
+> antes de anotarlo en el status, el intento siguiente choca con un nombre que ya existe y esa
+> carrera se convierte en un no-op. La colisión es la respuesta, no el problema.
+>
+> **Un cron puede estar bien escrito y no ocurrir jamás.** `0 3 31 2 *` es el 31 de febrero: pasa el
+> regex del CRD y no se cumple en ninguna fecha del calendario. La única forma de detectarlo es
+> pedirle un disparo, y hay que pedírselo dentro del bloque que captura el error. La primera versión
+> lo pedía más abajo, la excepción salía del reconciler y la política se quedaba sin status, que es
+> justo el sitio donde había que contarlo.
+>
+> **`kubectl` no imprime las columnas de tipo DATE: imprime la antigüedad.** Y la antigüedad de algo
+> que aún no ha pasado es negativa, así que la columna del próximo disparo salía como `<invalid>`.
+> DATE sirve para lo que ya ocurrió. Es un error de diseño del módulo 2 que solo se ve cuando hay
+> una fecha futura que enseñar.
 
 ### M6 · Retención — 1 a 2 días
 

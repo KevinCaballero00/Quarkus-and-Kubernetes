@@ -57,6 +57,22 @@ public class BackupPolicySpec {
     @JsonPropertyDescription("Que hacer si toca disparar y el backup anterior sigue corriendo.")
     private ConcurrencyPolicy concurrencyPolicy = ConcurrencyPolicy.Forbid;
 
+    /**
+     * Cuanto puede llegar tarde un disparo y seguir mereciendo la pena.
+     *
+     * <p>Manda cuando el operator vuelve de una caida. Sin este campo, un disparo
+     * perdido se ejecuta por viejo que sea, que es lo razonable para una copia de
+     * seguridad: mas vale tarde. Con el, una politica horaria puede decir que un
+     * disparo de hace seis horas ya no aporta nada porque el siguiente esta a la
+     * vuelta de la esquina.
+     *
+     * <p>En ningun caso se recuperan varios disparos: se ejecuta como mucho el
+     * ultimo que se perdio.
+     */
+    @Min(0)
+    @JsonPropertyDescription("Antiguedad maxima, en segundos, de un disparo perdido para recuperarlo.")
+    private Long startingDeadlineSeconds;
+
     @JsonPropertyDescription("Cuantas copias se conservan. Si se omite, no se borra nada nunca.")
     private RetentionPolicy retention;
 
@@ -127,6 +143,14 @@ public class BackupPolicySpec {
 
     public void setConcurrencyPolicy(ConcurrencyPolicy concurrencyPolicy) {
         this.concurrencyPolicy = concurrencyPolicy;
+    }
+
+    public Long getStartingDeadlineSeconds() {
+        return startingDeadlineSeconds;
+    }
+
+    public void setStartingDeadlineSeconds(Long startingDeadlineSeconds) {
+        this.startingDeadlineSeconds = startingDeadlineSeconds;
     }
 
     public RetentionPolicy getRetention() {

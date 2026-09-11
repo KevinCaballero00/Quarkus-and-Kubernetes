@@ -13,6 +13,13 @@ spec:
   timeZone: America/Bogota
   concurrencyPolicy: Forbid
 
+  # Cuanto puede llegar tarde un disparo y seguir mereciendo la pena. Manda
+  # cuando el operator vuelve de una caida: con esto, un disparo de las 3:00 que
+  # se descubre a las 5:00 se ejecuta igual, pero uno de hace dos dias no. Si se
+  # omite, se recupera por viejo que sea. En ningun caso se recuperan varios: se
+  # ejecuta como mucho el ultimo que se perdio.
+  startingDeadlineSeconds: 7200
+
   source:
     host: postgres.pgvault-system.svc.cluster.local
     port: 5432
