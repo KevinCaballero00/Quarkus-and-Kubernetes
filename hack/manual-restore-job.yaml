@@ -1,0 +1,43 @@
+# Restauracion lanzada a mano hacia la instancia de staging, que esta vacia.
+#
+# Restaurar en una instancia distinta y no sobre el origen es lo que convierte
+# esto en una prueba de verdad: cruza la red, usa otras credenciales y no puede
+# aprobarse por accidente leyendo los datos originales.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: manual-restore
+  namespace: pgvault-system
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: restore
+          image: pgvault/runner:dev
+          imagePullPolicy: Never
+          command: ["/usr/local/bin/restore.sh"]
+          env:
+            - { name: PGVAULT_PG_HOST,        value: postgres-staging }
+            - { name: PGVAULT_PG_PORT,        value: "5432" }
+            - { name: PGVAULT_PG_DATABASE,    value: orders }
+            - { name: PGVAULT_PG_SSLMODE,     value: prefer }
+            - { name: PGVAULT_S3_ENDPOINT,    value: "http://minio:9000" }
+            - { name: PGVAULT_S3_BUCKET,      value: pg-backups }
+            - { name: PGVAULT_OBJECT_KEY,     value: "orders/manual-0001.dump.zst" }
+            - { name: PGVAULT_DROP_EXISTING,  value: "false" }
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: staging-db, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: staging-db, key: password }
+          envFrom:
+            - secretRef:
+                name: minio-creds
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }

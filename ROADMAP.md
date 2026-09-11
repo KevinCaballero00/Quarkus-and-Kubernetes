@@ -192,11 +192,33 @@ Los tres CRDs completos. Aquí es donde un operator se distingue de un script di
 Que el volcado funcione a mano antes de automatizarlo. Depurar un Job es mucho más barato que depurar
 un Job que además creó un reconciler.
 
-- [ ] Desplegar PostgreSQL con datos de ejemplo y MinIO en el clúster.
-- [ ] Construir la imagen runner: cliente de PostgreSQL más un cargador a S3, con volcado en streaming para no llenar el disco del contenedor.
-- [ ] Ejecutarla como un Job escrito a mano y recuperar el volcado.
+- [x] Dos PostgreSQL y un MinIO en el namespace `pgvault-system`, con 50.000 filas de ejemplo.
+- [x] Imagen runner con `pg_dump`, `pg_restore` y `mc`, volcado en streaming sin tocar disco.
+- [x] Backup manual: 50.000 filas comprimidas a 261 KB en el bucket.
+- [x] Restauración manual a la instancia de staging con huella MD5 idéntica.
 
 **Cierras cuando:** un Job manual deja un objeto en el bucket y lo restauras en una base vacía.
+
+> **La compresión la hace `pg_dump`, no una tubería.** En formato `Custom` la salida ya va
+> comprimida, así que encadenar un compresor externo gastaría CPU sobre datos ya
+> comprimidos. El `pg_dump` de esta imagen está enlazado contra libzstd, liblz4 y libz, así
+> que `--compress=zstd:3` funciona. La tubería externa solo se usa en formato `Plain`.
+>
+> **`set -o pipefail` es la garantía de corrección del runner.** Sin él, un `pg_dump` que
+> muere a mitad deja que el cargador suba un objeto truncado y el Job termine en verde. Para
+> una herramienta de copias ese es el peor fallo posible: se descubre al restaurar.
+>
+> **La clave del objeto la calcula el operator, no el runner.** Si el Job falla a medias, el
+> finalizer necesita saber qué objeto borrar. Una clave inventada dentro del contenedor
+> dejaría basura que nadie sabría localizar.
+>
+> **`runAsNonRoot` exige un UID numérico en la imagen.** Con `USER postgres` el pod se queda
+> en `CreateContainerConfigError`, porque kubelet no puede comprobar que no sea root antes de
+> arrancar. Hay que escribir `USER 70:70`.
+>
+> **`kind load` falla con las imágenes de Docker Desktop.** Importa para todas las
+> plataformas y Docker solo guarda la local. Con imágenes públicas no hace falta: los nodos
+> las descargan. Solo la imagen propia necesita cargarse.
 
 ### M4 · Reconciler de Backup — 2 a 3 días
 

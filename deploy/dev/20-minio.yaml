@@ -1,0 +1,74 @@
+# MinIO hace de S3 en desarrollo. El mismo runner y el mismo codigo sirven
+# contra S3 de verdad cambiando solo el endpoint y desactivando forcePathStyle.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: minio-data
+  namespace: pgvault-system
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: minio
+  namespace: pgvault-system
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: minio
+  template:
+    metadata:
+      labels:
+        app: minio
+    spec:
+      containers:
+        - name: minio
+          image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+          args: [server, /data, --console-address, ":9001"]
+          ports:
+            - { containerPort: 9000, name: s3 }
+            - { containerPort: 9001, name: console }
+          env:
+            # Las credenciales de root de MinIO son las mismas que consume el
+            # runner como credenciales S3, para no mantener dos juegos en dev.
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef: { name: minio-creds, key: AWS_ACCESS_KEY_ID }
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: minio-creds, key: AWS_SECRET_ACCESS_KEY }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: 9000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: minio-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: pgvault-system
+spec:
+  selector:
+    app: minio
+  ports:
+    - { port: 9000, targetPort: 9000, name: s3 }
+    - { port: 9001, targetPort: 9001, name: console }

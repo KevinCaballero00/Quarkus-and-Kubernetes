@@ -1,0 +1,103 @@
+# Datos de ejemplo y bucket. Ambos Jobs son idempotentes, asi que se pueden
+# volver a aplicar sin romper nada.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: seed-sql
+  namespace: pgvault-system
+data:
+  seed.sql: |
+    DROP TABLE IF EXISTS orders;
+
+    CREATE TABLE orders (
+      id         bigserial PRIMARY KEY,
+      customer   text NOT NULL,
+      total      numeric(12,2) NOT NULL,
+      placed_at  timestamptz NOT NULL
+    );
+
+    INSERT INTO orders (customer, total, placed_at)
+    SELECT
+      'cliente-' || g,
+      ((g * 7) % 1000) + 0.99,
+      timestamptz '2026-01-01 00:00:00Z' + (g || ' minutes')::interval
+    FROM generate_series(1, 50000) AS g;
+
+    CREATE INDEX orders_placed_at_idx ON orders (placed_at);
+
+    ANALYZE orders;
+
+  # Huella que se compara antes y despues de restaurar.
+  fingerprint.sql: |
+    SELECT count(*)                                        AS filas,
+           sum(total)                                      AS suma,
+           md5(string_agg(customer, ',' ORDER BY id))      AS huella
+    FROM orders;
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: seed-orders
+  namespace: pgvault-system
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: psql
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              until pg_isready -h postgres -U "$PGUSER" -d orders; do
+                echo "esperando a postgres..."
+                sleep 2
+              done
+              psql -h postgres -d orders -v ON_ERROR_STOP=1 -f /sql/seed.sql
+              echo "--- huella de los datos sembrados ---"
+              psql -h postgres -d orders -v ON_ERROR_STOP=1 -f /sql/fingerprint.sql
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: orders-db, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: orders-db, key: password }
+          volumeMounts:
+            - name: sql
+              mountPath: /sql
+      volumes:
+        - name: sql
+          configMap:
+            name: seed-sql
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: create-bucket
+  namespace: pgvault-system
+spec:
+  backoffLimit: 10
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              until mc alias set local http://minio:9000 "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY"; do
+                echo "esperando a minio..."
+                sleep 2
+              done
+              mc mb --ignore-existing local/pg-backups
+              mc ls local/
+          envFrom:
+            - secretRef:
+                name: minio-creds

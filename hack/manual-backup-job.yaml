@@ -1,0 +1,46 @@
+# Backup lanzado a mano, sin operator de por medio.
+#
+# Este Job es el borrador de lo que el BackupReconciler construira en el modulo
+# 4. Escribirlo primero a mano y depurarlo aqui es mucho mas barato que depurar
+# un Job que ademas fue generado por un reconciler: cuando algo falle en M4, ya
+# se sabra que el plano de datos funciona y el fallo estara en el controlador.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: manual-backup
+  namespace: pgvault-system
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: backup
+          image: pgvault/runner:dev
+          # La imagen se carga en el cluster con kind load, no existe en ningun
+          # registro. Sin esto, kubelet intentaria descargarla y fallaria.
+          imagePullPolicy: Never
+          env:
+            - { name: PGVAULT_PG_HOST,     value: postgres }
+            - { name: PGVAULT_PG_PORT,     value: "5432" }
+            - { name: PGVAULT_PG_DATABASE, value: orders }
+            - { name: PGVAULT_PG_SSLMODE,  value: prefer }
+            - { name: PGVAULT_S3_ENDPOINT, value: "http://minio:9000" }
+            - { name: PGVAULT_S3_BUCKET,   value: pg-backups }
+            - { name: PGVAULT_OBJECT_KEY,  value: "orders/manual-0001.dump.zst" }
+            - { name: PGVAULT_FORMAT,      value: Custom }
+            - { name: PGVAULT_COMPRESSION, value: Zstd }
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: orders-db, key: username }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: orders-db, key: password }
+          envFrom:
+            - secretRef:
+                name: minio-creds
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits: { memory: 512Mi }
