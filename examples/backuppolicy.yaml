@@ -40,6 +40,12 @@ spec:
   format: Custom
   compression: Zstd
 
+  # Los cuatro criterios keep* se suman: una copia sobrevive si la salva
+  # cualquiera de ellos. maxAge es el unico que resta, se aplica al final y gana
+  # a los demas, asi que aqui ninguna copia pasa de 30 dias por mucho que
+  # keepWeekly quisiera guardar cuatro semanas justas.
+  #
+  # La copia correcta mas reciente no se borra nunca, tampoco por maxAge.
   retention:
     keepLast: 7
     keepWeekly: 4

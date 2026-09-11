@@ -21,6 +21,9 @@ import io.pgvault.operator.api.v1alpha1.BackupSummary;
 import io.pgvault.operator.api.v1alpha1.ConcurrencyPolicy;
 import io.pgvault.operator.api.v1alpha1.ExecutionPhase;
 import io.pgvault.operator.api.v1alpha1.LocalObjectRef;
+import io.pgvault.operator.api.v1alpha1.RetentionPolicy;
+import io.pgvault.operator.retention.BackupRecord;
+import io.pgvault.operator.retention.Retention;
 import io.pgvault.operator.schedule.CronExpression;
 import io.pgvault.operator.schedule.ScheduleWindow;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -33,6 +36,7 @@ import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -200,6 +204,8 @@ public class BackupPolicyReconciler implements Reconciler<BackupPolicy> {
 
         status.setNextScheduleTime(window.next().toInstant().toString());
 
+        collectGarbage(policy, backups, zone, context);
+
         Duration untilNext = Duration.between(Instant.now(), window.next().toInstant())
                 .plus(WAKE_UP_MARGIN);
         if (untilNext.isNegative()) {
@@ -208,6 +214,68 @@ public class BackupPolicyReconciler implements Reconciler<BackupPolicy> {
 
         UpdateControl<BackupPolicy> control = patchIfChanged(policy, status, before);
         return control.rescheduleAfter(untilNext);
+    }
+
+    /**
+     * Borra las copias que sobran, al final de cada reconciliacion que llego
+     * hasta aqui.
+     *
+     * <p>Este metodo no decide nada: pregunta y ejecuta. Toda la logica esta en
+     * {@link Retention}, que es una funcion pura y por eso se puede probar con
+     * una lista escrita a mano en vez de con un cluster y un reloj falso.
+     *
+     * <p>Y solo borra recursos. El objeto del bucket se lo lleva el finalizer de
+     * cada Backup, que es lo que mantiene el almacenamiento como consecuencia del
+     * estado de la API en vez de como un segundo inventario que hay que
+     * sincronizar. Si alguien borra una copia a mano con kubectl, ocurre
+     * exactamente lo mismo que si la descarta la retencion.
+     */
+    private void collectGarbage(BackupPolicy policy,
+                                List<Backup> backups,
+                                ZoneId zone,
+                                Context<BackupPolicy> context) {
+
+        RetentionPolicy retention = policy.getSpec().getRetention();
+        if (retention == null) {
+            return;
+        }
+
+        Map<String, Backup> byName = new HashMap<>();
+        List<BackupRecord> records = new ArrayList<>();
+
+        for (Backup backup : backups) {
+            // Una copia en curso no se toca, y una que ya se esta borrando
+            // tampoco: su finalizer puede tardar unos segundos en soltarla y
+            // durante ese rato seguiria apareciendo aqui.
+            if (backup.getMetadata().getDeletionTimestamp() != null) {
+                continue;
+            }
+            BackupStatus backupStatus = backup.getStatus();
+            if (backupStatus == null
+                    || backupStatus.getCompletionTime() == null
+                    || (backupStatus.getPhase() != ExecutionPhase.Succeeded
+                        && backupStatus.getPhase() != ExecutionPhase.Failed)) {
+                continue;
+            }
+            try {
+                String name = backup.getMetadata().getName();
+                records.add(new BackupRecord(name,
+                        Instant.parse(backupStatus.getCompletionTime()),
+                        backupStatus.getPhase() == ExecutionPhase.Succeeded));
+                byName.put(name, backup);
+            } catch (RuntimeException e) {
+                LOG.debugf("Copia %s con completionTime ilegible, la retencion la ignora",
+                        backup.getMetadata().getName());
+            }
+        }
+
+        for (BackupRecord discarded
+                : Retention.selectForDeletion(records, retention, zone, Instant.now())) {
+            LOG.infof("Politica %s/%s: la retencion descarta %s, terminada el %s",
+                    policy.getMetadata().getNamespace(), policy.getMetadata().getName(),
+                    discarded.name(), discarded.completedAt());
+            context.getClient().resource(byName.get(discarded.name())).delete();
+        }
     }
 
     /** Aplica la politica de concurrencia y, si procede, crea el Backup del disparo. */

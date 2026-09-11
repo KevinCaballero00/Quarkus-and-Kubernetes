@@ -354,11 +354,55 @@ febrero y la hora que no existe el día del cambio de horario.
 
 Sin esto el proyecto es una demo. Con esto es una herramienta.
 
-- [ ] Escribirlo como una función pura: lista de backups más política, devuelve la lista a borrar. Sin clientes ni relojes dentro.
-- [ ] Combinar los criterios de últimos N, diarios, semanales y edad máxima sin que se pisen.
-- [ ] Recolectar al final de cada reconciliación exitosa de la política.
+- [x] Función pura: lista de copias más política, devuelve la lista a borrar. Sin clientes ni relojes dentro.
+- [x] Últimos N, diarios, semanales, mensuales y edad máxima, combinados sin pisarse.
+- [x] Recolección al final de cada reconciliación de la política que llega hasta el final.
 
 **Cierras cuando:** con conservar los últimos tres y disparos rápidos, nunca hay un cuarto CR ni un cuarto objeto.
+
+Verificado en el clúster con una política cada minuto y `keepLast: 3`. Durante siete minutos y seis
+copias, la cuenta se quedó clavada en tres recursos y tres objetos, y los tres siempre eran los tres
+últimos. Las reglas se comprobaron aparte con `jshell`: keepLast, keepDaily con dos copias el mismo
+día, keepWeekly cruzando semana ISO, maxAge ganándole a un keepLast alto, la última copia
+sobreviviendo a un maxAge de una hora, y el último fallo conservándose mientras el anterior se
+descarta.
+
+> **La retención solo borra CRs.** El objeto del bucket se lo lleva el finalizer de cada copia, que ya
+> existía desde el módulo 4. Es la mitad que completa la idea: el almacenamiento es una consecuencia
+> del estado de la API y no un segundo inventario que alguien tenga que sincronizar. Borrar una copia
+> a mano con `kubectl` hace exactamente lo mismo que descartarla por política, y eso es justo lo que
+> se quiere de una herramienta de copias.
+>
+> **Los criterios de conservación se suman y `maxAge` resta.** Una copia sobrevive si la salva
+> cualquiera de los cuatro `keep*`, así que un `keepLast` bajo no se lleva por delante las semanales.
+> `maxAge` es distinto: su descripción dice "descarta lo más viejo que esto", y eso no admite
+> excepciones, así que se aplica al final y gana a los demás. Es el único que puede dejar en nada un
+> `keepMonthly: 12`, y conviene saberlo antes de escribir los dos juntos.
+>
+> **La copia correcta más reciente no se borra nunca.** Ni siquiera cuando `maxAge` dice que ya es
+> vieja. Una herramienta de copias que se queda sin ninguna copia por una regla mal escrita ha
+> fallado en lo único que tenía que hacer. Tiene una consecuencia que hay que decir en voz alta: si
+> lo que se busca es un techo legal de retención y no una política de espacio, esa última copia hay
+> que borrarla a mano.
+>
+> **Los periodos que se cuentan son los que tienen copias, no los del calendario.** Con copias
+> diarias y una semana de clúster parado, `keepDaily: 7` conserva siete copias y no las tres que
+> quedaron dentro de los últimos siete días naturales. Es lo que hace restic, y es lo que espera
+> quien escribió el número.
+>
+> **El día empieza donde dice la política, no en UTC.** Agrupar por día en UTC parte las copias
+> nocturnas de media Europa y de toda América por la mitad del día equivocado, y hace que
+> `keepDaily` conserve dos copias de una noche y ninguna de otra.
+>
+> **De las ejecuciones fallidas se conserva la última.** Es la que explica por qué no hay una copia
+> más reciente; borrarla dejaría el problema invisible y el status de la política mintiendo por
+> omisión. Las anteriores a esa no cuentan nada que esta no cuente ya. Es la misma elección que hace
+> Kubernetes con `failedJobsHistoryLimit`, con el límite fijado en uno.
+>
+> **La función pura no recibe recursos de Kubernetes, sino tres campos por copia.** Nombre, instante
+> y si sirvió. Así el algoritmo no puede mirar nada más aunque quiera, y se prueba con una lista
+> escrita a mano en vez de con un clúster y un reloj falso. Es la misma razón por la que el cálculo
+> del cron vive aparte en el módulo 5.
 
 ### M7 · Reconciler de Restore — 2 días
 
