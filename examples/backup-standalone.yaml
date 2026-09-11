@@ -1,0 +1,34 @@
+# Copia puntual de una base que no tiene politica.
+#
+# La otra forma de escribir un Backup, sin policyRef: origen y destino completos
+# en el propio recurso. Sirve para una migracion, una auditoria o una base que
+# solo se copia una vez, sin dejar detras una politica que nadie va a mantener.
+#
+# Una regla CEL del esquema impide mezclar las dos formas, asi que el servidor de
+# API rechaza un Backup que traiga policyRef y source a la vez. Nada de esto
+# llega al reconciler.
+apiVersion: pgvault.io/v1alpha1
+kind: Backup
+metadata:
+  name: orders-antes-de-migrar
+  namespace: pgvault-system
+spec:
+  source:
+    host: postgres
+    database: orders
+    credentialsSecretRef:
+      name: orders-db
+
+  destination:
+    s3:
+      endpoint: http://minio:9000
+      bucket: pg-backups
+      prefix: puntuales/
+      credentialsSecretRef:
+        name: minio-creds
+
+  # Sin politica de la que heredar, formato y compresion se pueden fijar aqui.
+  # Si se omiten, los resuelve el reconciler con los mismos valores que una
+  # politica trae por defecto: Custom y Zstd.
+  format: Custom
+  compression: Zstd

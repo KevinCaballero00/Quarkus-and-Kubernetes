@@ -10,11 +10,26 @@
 # operator tiene que conocer la clave ANTES de lanzar el Job, porque si el Job
 # falla a medias el finalizer necesita saber que objeto borrar. Si la clave la
 # inventara el runner, un fallo dejaria basura que nadie sabria localizar.
+#
+# El resultado se devuelve por el mensaje de terminacion del contenedor, no por
+# el log. El kubelet copia ese fichero al status del Pod, asi que el operator lo
+# lee con un GET normal y no necesita permiso sobre pods/log, que dejaria ver
+# todo lo que cualquier contenedor haya impreso. Ademas los logs se rotan; el
+# status del Pod no.
 
 set -euo pipefail
 
+PGVAULT_TERMINATION_LOG="${PGVAULT_TERMINATION_LOG:-/dev/termination-log}"
+
+# El mensaje son pares clave=valor separados por espacios, con error= al final
+# porque su valor lleva espacios. El kubelet lo trunca a 4 KiB, de sobra.
+report() {
+  printf '%s' "$*" > "$PGVAULT_TERMINATION_LOG" 2>/dev/null || true
+}
+
 fail() {
   echo "ERROR: $*" >&2
+  report "error=$*"
   exit 1
 }
 
@@ -120,4 +135,5 @@ tamano="$(mc stat --json "$destino" | sed -n 's/.*"size":\([0-9]*\).*/\1/p')"
 [ "$tamano" -gt 0 ] || fail "el objeto subido esta vacio"
 
 echo "==> listo en $((fin - inicio))s, ${tamano} bytes"
-echo "PGVAULT_RESULT objectKey=${PGVAULT_OBJECT_KEY} sizeBytes=${tamano} durationSeconds=$((fin - inicio)) postgresVersion=${server_version}"
+
+report "objectKey=${PGVAULT_OBJECT_KEY} sizeBytes=${tamano} durationSeconds=$((fin - inicio)) postgresVersion=${server_version}"

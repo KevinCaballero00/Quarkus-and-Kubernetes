@@ -53,6 +53,16 @@
             <groupId>io.fabric8</groupId>
             <artifactId>generator-annotations</artifactId>
         </dependency>
+        <!--
+          Mismo caso que generator-annotations, ahora con las reglas RBAC:
+          @RBACRule es lo que declara los permisos extra que el generador no
+          puede adivinar, como leer Pods para recoger el resultado de un Job.
+          Llega al classpath de build pero no al de compilacion.
+        -->
+        <dependency>
+            <groupId>io.quarkiverse.operatorsdk</groupId>
+            <artifactId>quarkus-operator-sdk-annotations</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>

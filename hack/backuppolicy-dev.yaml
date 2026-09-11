@@ -1,0 +1,32 @@
+# Politica apuntando al PostgreSQL y al MinIO que levanta deploy/dev.
+#
+# Vive en pgvault-system y no en default, que es donde esta el ejemplo de la
+# carpeta examples, porque los Secret de la base y del bucket son locales a su
+# namespace: una referencia a un Secret nunca cruza fronteras, ni aqui ni en el
+# resto de la API de Kubernetes.
+#
+# Su schedule es de madrugada a proposito. Hasta el modulo 5 nadie lo lee, y
+# mientras tanto la politica solo sirve de plantilla de la que heredan los
+# Backup ad-hoc.
+apiVersion: pgvault.io/v1alpha1
+kind: BackupPolicy
+metadata:
+  name: orders-nightly
+  namespace: pgvault-system
+spec:
+  schedule: "0 3 * * *"
+  timeZone: America/Bogota
+  source:
+    host: postgres
+    database: orders
+    credentialsSecretRef:
+      name: orders-db
+  destination:
+    s3:
+      endpoint: http://minio:9000
+      bucket: pg-backups
+      prefix: orders/
+      credentialsSecretRef:
+        name: minio-creds
+  format: Custom
+  compression: Zstd

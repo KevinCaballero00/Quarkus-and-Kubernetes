@@ -28,6 +28,24 @@ public class BackupStatus {
     @JsonPropertyDescription("Job que ejecuta el volcado.")
     private String jobName;
 
+    /**
+     * Copia del destino con el que se lanzo el Job.
+     *
+     * <p>Sin esta copia, borrar la politica antes que sus Backup dejaria al
+     * finalizer sin saber a que bucket conectarse, y el recurso se quedaria
+     * colgado para siempre con el objeto huerfano en el almacenamiento. Con
+     * ella, un Backup es autosuficiente: contiene todo lo necesario para
+     * localizar, verificar y borrar su propia copia.
+     */
+    @JsonPropertyDescription("Destino efectivo con el que se lanzo el Job, copiado de la politica o del spec.")
+    private Destination destination;
+
+    @JsonPropertyDescription("Formato efectivo del volcado, ya resuelto contra la politica.")
+    private DumpFormat format;
+
+    @JsonPropertyDescription("Compresion efectiva del volcado, ya resuelta contra la politica.")
+    private CompressionAlgorithm compression;
+
     @JsonPropertyDescription("Instante en que arranco.")
     private String startTime;
 
@@ -79,6 +97,30 @@ public class BackupStatus {
 
     public void setJobName(String jobName) {
         this.jobName = jobName;
+    }
+
+    public Destination getDestination() {
+        return destination;
+    }
+
+    public void setDestination(Destination destination) {
+        this.destination = destination;
+    }
+
+    public DumpFormat getFormat() {
+        return format;
+    }
+
+    public void setFormat(DumpFormat format) {
+        this.format = format;
+    }
+
+    public CompressionAlgorithm getCompression() {
+        return compression;
+    }
+
+    public void setCompression(CompressionAlgorithm compression) {
+        this.compression = compression;
     }
 
     public String getStartTime() {

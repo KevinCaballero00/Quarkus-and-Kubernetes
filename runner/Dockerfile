@@ -17,8 +17,8 @@ RUN apk add --no-cache bash zstd
 
 COPY --from=minio/mc:latest /usr/bin/mc /usr/local/bin/mc
 
-COPY backup.sh restore.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/restore.sh
+COPY backup.sh restore.sh cleanup.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/backup.sh /usr/local/bin/restore.sh /usr/local/bin/cleanup.sh
 
 # UID numerico, no "postgres", y esto no es cosmetico: con runAsNonRoot en el
 # pod, kubelet tiene que poder comprobar que el usuario no es root ANTES de

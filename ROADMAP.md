@@ -224,13 +224,62 @@ un Job que además creó un reconciler.
 
 El corazón del proyecto. Un CR de `Backup` gobierna un Job y refleja su destino.
 
-- [ ] El Job como recurso dependiente, con un matcher que nunca intente actualizarlo: los Jobs son casi inmutables y este es el error clásico que provoca bucles de reconciliación.
-- [ ] Fuente de eventos sobre Jobs, mapeando cada uno a su `Backup` por referencia de propietario.
-- [ ] Traducir el estado del Job a fase, condiciones, duración, tamaño y clave del objeto.
-- [ ] Finalizer que borra el objeto en S3 cuando se borra el CR, sin soltar el finalizer si el borrado falla.
-- [ ] Manejador de error que deja la causa en el status, no solo en los logs.
+- [x] El Job como recurso dependiente que solo crea y nunca actualiza.
+- [x] Fuente de eventos sobre Jobs, mapeando cada uno a su `Backup` por referencia de propietario.
+- [x] Estado del Job traducido a fase, condiciones, duración, tamaño y clave del objeto.
+- [x] Finalizer que borra el objeto en S3 con otro Job, y no lo suelta si el borrado falla.
+- [x] Manejador de error que deja la causa en el status, no solo en los logs.
+- [ ] Checksum SHA-256 del objeto. El campo existe en el status; calcularlo en streaming desde bash pide una tubería con `tee` cuya condición de carrera no compensa. Sale gratis en el extra 1, cuando el runner sea un binario.
 
 **Cierras cuando:** un `Backup` ad-hoc llega a Succeeded con su clave, y borrarlo con kubectl libera el objeto en MinIO.
+
+Verificado de extremo a extremo: 267 KB en `orders/orders-m4-20260911T194635Z.dump.zst` en seis segundos,
+con la versión del servidor de origen en el status; `kubectl delete` lanzó la limpieza y el objeto
+desapareció del bucket en cinco segundos.
+
+> **El dependiente solo crea, y esa es toda la defensa contra el bucle.** La clase implementa
+> `Creator` y no `Updater`, así que el SDK ni siquiera llega a comparar el Job deseado con el
+> que existe. Con un dependiente normal, la comparación encuentra diferencias en campos que el
+> servidor de API no deja cambiar, el parche se rechaza, se reintenta y las vuelve a encontrar.
+> Un Job es un hecho consumado: o se deja como está, o se borra y se crea otro.
+>
+> **El workflow se invoca a mano.** Con invocación automática, borrar el Job de un `Backup` ya
+> terminado hace que el dependiente lo recree, porque desde su punto de vista falta algo que
+> debería estar. Y recrearlo significa volcar la base otra vez y sobrescribir un objeto que
+> estaba bien. Comprobar la fase antes de tocar nada cuesta tres líneas y lo evita.
+>
+> **El resultado viaja en el mensaje de terminación del contenedor, no en el log.** El runner
+> escribe una línea en `/dev/termination-log` y el kubelet la copia al status del Pod, así que
+> el operator la lee con un GET normal. Leer el log del Pod exigiría permiso sobre `pods/log`,
+> que deja ver todo lo que cualquier contenedor haya impreso, credenciales incluidas, y además
+> los logs se rotan: el dato del que depende el status sería el más frágil de todos.
+>
+> **El borrado en S3 también lo hace un Job.** La alternativa era meter un cliente de S3 en el
+> operator, y con él la necesidad de leer los Secret de todos los namespaces observados. Con un
+> Job, las credenciales siguen viviendo solo dentro de un Pod efímero y el operator nunca sabe
+> más que el nombre del Secret. El precio es que borrar un `Backup` tarda cinco segundos en vez
+> de uno; la propiedad que se compra es que el operator no es un objetivo interesante.
+>
+> **El script de limpieza es idempotente, y no por elegancia.** El finalizer no suelta el
+> recurso hasta que la limpieza confirma, así que el mismo borrado puede ejecutarse varias
+> veces: un reintento tras un corte, o un Job recreado porque el operator se reinició. Un objeto
+> que ya no está significa trabajo hecho, no error. Es lo que hace que un `Backup` fallido, que
+> tiene clave pero nunca llegó a subir nada, se borre igual de limpio.
+>
+> **El `Backup` guarda una copia de su destino en el status.** Sin ella, borrar la política antes
+> que sus copias dejaría al finalizer sin saber a qué bucket conectarse y el recurso se quedaría
+> colgado para siempre con el objeto huérfano dentro. Con ella, un `Backup` es autosuficiente:
+> lleva encima todo lo necesario para localizar, verificar y borrar su propia copia.
+>
+> **La clave del objeto sale de datos que ya no cambian**, el nombre del recurso y su instante de
+> creación, para que recalcularla tras un reinicio devuelva la misma cadena. Y si el Job ya
+> existe, manda la clave que lleva en su propio `env`: la política pudo cambiar de prefijo
+> después de lanzarlo, y el objeto que se subió no se mueve solo.
+>
+> **Un `policyRef` que no resuelve se lanza como excepción, no se traga.** Eso da reintentos con
+> backoff, que es lo correcto cuando la política llega cinco segundos más tarde. El precio es una
+> traza completa en el log del operator ante un error que es del usuario. Se paga a gusto: la
+> causa acaba escrita en la condition, que es donde la va a buscar quien aplicó el YAML.
 
 ### M5 · Reconciler de política y planificador — 2 días
 
